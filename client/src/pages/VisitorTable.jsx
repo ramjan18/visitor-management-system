@@ -10,10 +10,21 @@ import {
   Select,
 
 } from '@mui/material';
+
+import { DemoContainer, DemoItem } from '@mui/x-date-pickers/internals/demo';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import { saveAs } from 'file-saver';
 import Papa from 'papaparse';
+
+
+
+const today = dayjs();
+const tomorrow = dayjs().add(1, 'day');
+
 
 export default function VisitorTable() {
   const [visitors, setVisitors] = useState([]);
@@ -33,13 +44,26 @@ export default function VisitorTable() {
 
   const fetchVisitors = async (startDateParam, endDateParam) => {
     try {
+      const URole = localStorage.getItem("role");
+      setUserRole(URole);
+      const user = JSON.parse(localStorage.getItem("user"));
+      console.log("userRole" , URole );
+      console.log(user.id);
       setLoading(true);
-      let url = 'http://localhost:5000/api/getVisitorByDate';
+      let url = "";
+      if(URole ==="Admin"){
+       url = 'http://localhost:5000/api/getVisitorByDate';
+      }
+      else{
+        const id = localStorage.getItem("user")
+        url = `http://localhost:5000/api/getVisitorByHostId/${user.id}`
+      }
       const params = new URLSearchParams();
         
       if (startDateParam) params.append('startDate', startDateParam);
       if (endDateParam) params.append('endDate', endDateParam);
       if (params.toString()) url += `?${params.toString()}`;
+
 
       const res = await axios.get(url);
       const visitors = res.data.allVisitors;
@@ -50,8 +74,7 @@ export default function VisitorTable() {
       }));
       setVisitors(formattedData);
 
-      const URole = localStorage.getItem("role");
-      setUserRole(URole);
+      
     } catch (error) {
       console.error('Failed to fetch visitors:', error);
     } finally {
@@ -134,13 +157,23 @@ export default function VisitorTable() {
     setEditVisitorData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSaveEdit = async() => {
-    console.log('Updated data to save:', editVisitorData);
-    const res = await axios.patch("http://localhost:5000/api/editVisitor",editVisitorData);
-    fetchVisitors(startDate, endDate);
-    setEditModalOpen(false);
-
+  const handleSaveEdit = async (id) => {
+    // const payload = {
+      
+    //   meetingTime: editVisitorData.meetingTime?.toISOString?.() || null,
+    // };
+  
+    // console.log('Updated data to save:', payload);
+  
+    try {
+      await axios.patch("http://localhost:5000/api/setMeetingTime", { meetingTime: editVisitorData.meetingTime?.toISOString?.() , id });
+      fetchVisitors(startDate, endDate);
+      setEditModalOpen(false);
+    } catch (err) {
+      console.error("Error saving edit:", err);
+    }
   };
+  
 
   const handleUpdateStatus = async (id, newStatus) => {
     try {
@@ -151,6 +184,15 @@ export default function VisitorTable() {
     }
   };
   
+
+  const handleCheckOut = async (id) => {
+    try {
+      await axios.patch(`http://localhost:5000/api/checkOutVisitor/${id}`);
+      fetchVisitors(startDate, endDate);
+    } catch (error) {
+      console.log("Failed to checkOut");
+    }
+  }
 
   // const columns = [
   //   { field: 'name', headerName: 'Name', flex: 1, minWidth: 130 },
@@ -312,9 +354,19 @@ export default function VisitorTable() {
     filterable: false,
     renderCell: (params) => (
       <Box sx={{ display: 'flex', gap: 1 }}>
+        {userRole === "Admin" && (
+        <>
         <Button variant="outlined" size="small" onClick={() => handleView(params.row)}>View</Button>
-        {/* <Button variant="outlined" size="small" color="success" onClick={() => handleEdit(params.row)}>Edit</Button> */}
+       
         <Button variant="outlined" size="small" color="error" onClick={() => handleDelete(params.row.id)}>Delete</Button>
+        {params.row.checkOutTime === null ? (<Button variant="outlined" size="small" color="error" onClick={() => handleCheckOut(params.row.id)}>CheckOut</Button>)
+        : (<Button variant="outlined" size="small" color="error" onClick={() => handleCheckOut(params.row.id)}>CheckOut</Button>)  }
+        
+        </>
+   ) }
+   {userRole !== "Admin" && (
+         <Button variant="outlined" size="small" color="success" onClick={() => handleEdit(params.row)}>Edit</Button>
+   )}
       </Box>
     ),
   });
@@ -387,18 +439,44 @@ export default function VisitorTable() {
         <DialogContent dividers>
           {editVisitorData && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <TextField label="Name" name="name" value={editVisitorData.name || ''} onChange={handleEditChange} />
+              {/* <TextField label="Name" name="name" value={editVisitorData.name || ''} onChange={handleEditChange} />
               <TextField label="Email" name="email" value={editVisitorData.email || ''} onChange={handleEditChange} />
               <TextField label="Phone Number" name="phoneNo" value={editVisitorData.phoneNo || ''} onChange={handleEditChange} />
               <TextField label="Visitor Type" name="typeOfVisitor" value={editVisitorData.typeOfVisitor || ''} onChange={handleEditChange} />
               <TextField label="Purpose" name="purpose" value={editVisitorData.purpose || ''} onChange={handleEditChange} />
-              <TextField label="Person to Meet" name="personToMeetName" value={editVisitorData.personToMeetName || ''} onChange={handleEditChange} />
+              <TextField label="Person to Meet" name="personToMeetName" value={editVisitorData.personToMeetName || ''} onChange={handleEditChange} /> */}
+               <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <DemoContainer
+        components={[
+
+          'DateTimePicker',
+         
+        ]}
+      >
+               <DemoItem label="DateTimePicker">
+               <DateTimePicker
+                name="meetingTime"
+                value={editVisitorData.meetingTime ? dayjs(editVisitorData.meetingTime) : null}
+                onChange={(newValue) => {
+                  setEditVisitorData((prev) => ({
+                    ...prev,
+                    meetingTime: newValue, // or newValue.toISOString() if sending to backend
+                  }));
+                }}
+                minDate={dayjs()} // for tomorrow
+                views={['year', 'month', 'day', 'hours', 'minutes']}
+              />
+
+
+                </DemoItem>
+                </DemoContainer>
+                </LocalizationProvider>
             </Box>
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditModalOpen(false)}>Cancel</Button>
-          <Button onClick={handleSaveEdit} variant="contained" color="primary">Save</Button>
+          <Button onClick={()=>handleSaveEdit(editVisitorData.id)} variant="contained" color="primary">Save</Button>
         </DialogActions>
       </Dialog>
     </Paper>

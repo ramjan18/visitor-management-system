@@ -42,6 +42,9 @@ const registrationSchema =new mongoose.Schema({
     checkOutTime : {
         type : Date,
     },
+    meetingTime : {
+        type : Date
+    }
 
    
 },
